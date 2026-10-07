@@ -95,7 +95,8 @@ Labels: **CONFIRMED** means explicitly supported by an existing observation or d
 | CONFIRMED | Normal A05E exposes audio/HID interfaces and no bulk endpoints. | H; subsequently captured directly in `readonly-device-check-20261007.json`. |
 | INFERRED | Normal-mode HID endpoints cannot substitute for the transient CDC bulk programmer transport. | H updater-driver analysis; successful S/A transport uses the separate programmer path. |
 | CONFIRMED | Current original-A HID is interface 3, interrupt IN `0x84`, maximum packet 3 bytes, interval 4 ms; HID 1.11; 47-byte report descriptor; Consumer Control report ID 1 with Volume Increment, Volume Decrement, Play/Pause input bits and padding. No Output or Feature main items are declared. | `readonly-device-check-20261007.json`; read-only check entry in `RESEARCH_LOG.md`. Actual button events were not captured. |
-| UNVERIFIED | HID descriptor changes after OTA transition or between stock A and modified B; any HID mechanism for DSP/EQ control. | No descriptor comparison results or supporting report captures found. |
+| CONFIRMED | Examined original 0.04 and official 0.23 A/B image HID descriptors are byte-identical. | Offline `hid_buttons.py` audit; `HID_BUTTON_RESEARCH.md`. |
+| UNVERIFIED | Live HID descriptor after OTA transition or from modified B; any HID mechanism for DSP/EQ control. | No new live B enumeration; static equality is distinct from a live capture. |
 | UNVERIFIED | Earlier suggestion that `CHECK` after `QUERY_SW_VER` disturbed post-reboot state. | D phrases this as “may”; not a demonstrated causal result. Do not promote it to a confirmed finding. |
 
 Consult this file and `RESEARCH_LOG.md` before repeating experiments. Missing captures are evidence gaps, not authorization to run new USB requests.
@@ -115,3 +116,16 @@ Evidence and reproducible commands: `RUNTIME_EQ_CONTROL.md`; `tools/research/run
 | CONFIRMED | Examined original UAUD Feature Unit paths support mute and volume selectors; other selectors have no EQ-record branch. HID descriptor exposes input buttons and no Output/Feature report. | Original UAUD setup/data dispatch and live descriptor capture. |
 | INFERRED | Strong technical evidence supports no safe exposed normal-mode runtime EQ mechanism in the examined original 0.04 and official 0.23 firmware. Ordinary volume changes are distinct from editing the EQ configuration. | Combined registered vendor dispatch, fixed-preset EQ call graph, audio-class path, and HID surface. Scope/limits in `RUNTIME_EQ_CONTROL.md`; not an exhaustive proof about inaccessible ROM or other revisions. |
 | UNVERIFIED | Runtime alteration of one EQ parameter reaching the DSP without reflashing; other firmware revisions or independent factory/debug interfaces. | No supported request path found; no new device experiment performed. |
+
+## Physical buttons and HID remapping
+
+| Status | Finding | Evidence |
+| --- | --- | --- |
+| CONFIRMED | Original/official button sample callbacks and debounce timer feed a registered application callback, mapper, 16-bit HID setter, and three-byte interrupt report. | Address table and control flow in `HID_BUTTON_RESEARCH.md`. |
+| INFERRED | Resistor-ladder/GPADC detection; key codes 2/4/8 are center/volume+/volume−. | Numeric sample thresholds and stock Consumer Control mappings; physical wiring not measured. |
+| CONFIRMED | Both drivers distinguish event 1 down, 4 up, 5 first long hold, 6 very long hold, and settled single/double/triple click events 7/8/9. | Timer callback branches and click-counter+7 dispatch in both versions; report contains exact addresses. |
+| CONFIRMED | Stock application mapper forwards only events 1/4 and discards native click/long events. | Original `0x0020e338`, official `0x0020d174`, event mask `0x12`. |
+| CONFIRMED | A same-length 47-byte descriptor can declare six one-bit usages plus ten padding bits, retaining report ID 1 and three-byte packets. | Authored descriptor parser/tests in `hid_buttons.py`; standard usages E9/EA/CD/B5/B6/CF. |
+| CONFIRMED | Official completion handler invokes application callback with sent mask/error before completing its own reconciliation; official application callback has additional Play/Pause mode behavior. | `0x0020dc70` / `0x0020c7dc`; integration cautions in report. |
+| INFERRED | A firmware strategy can implement the requested eight mappings by retaining native detection, replacing the mapper, expanding descriptor usages, and serializing action press/zero reports. | `HID_BUTTON_RESEARCH.md`; authored C queue compiles for Thumb; eleven offline tests including compiled-C/reference parity passed. |
+| UNVERIFIED | Linked patch placement/image integrity, firmware transport adapter, physical gesture timing/wiring, final device execution and host voice-assistant response. | Strategy is established; no patched image or physical experiment performed. |

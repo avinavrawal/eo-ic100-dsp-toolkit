@@ -44,9 +44,10 @@ def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('input',type=Path)
     p.add_argument('--base',type=lambda s:int(s,0),default=0x20000000)
+    p.add_argument('--output',type=Path)
     args=p.parse_args()
     result=index(args.input.read_bytes(),args.base)
-    out=args.input.parent/'thumb-index.json'
+    out=args.output or args.input.parent/'thumb-index.json'
     out.write_text(json.dumps(result)+'\n')
     print(out, 'literal candidates',len(result['literals']),'call candidates',len(result['calls']))
 
