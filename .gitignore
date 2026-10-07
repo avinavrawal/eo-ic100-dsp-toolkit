@@ -1,0 +1,29 @@
+# User-supplied / proprietary Samsung assets
+*.apk
+PID_A05E_sw*.zip
+programmer3001sp.bin
+diamond_a.bin
+diamond_b.bin
+ss_s11_3001sp_boot_*.bin
+
+# Backups and logs
+flash-backup.bin
+*.zip
+eoic100-FINAL-*/
+eoic100-slot-switch-*/
+
+# Compiled Termux binary
+tools/termux/eoic100
+
+# Python
+__pycache__/
+*.pyc
+# Local private firmware and device-specific binaries
+/firmware/private/
+*.bin
+
+# Large generated research output and binary-derived caches
+/research/cache/
+
+# Local raw device captures
+/research/readonly-device-check-*.json
