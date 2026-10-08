@@ -5,25 +5,48 @@ programmer3001sp.bin
 diamond_a.bin
 diamond_b.bin
 ss_s11_3001sp_boot_*.bin
+*.bin
+*.zip
+/firmware/private/
 
 # Backups and logs
 flash-backup.bin
-*.zip
+*flash-backup*
+*flash-current*
+*readback*
+*.log
+*.pcap
+*.pcapng
+*.trace
+*.dump
+*.usb-capture*
+*-evidence.json
 eoic100-FINAL-*/
 eoic100-slot-switch-*/
 
 # Compiled Termux binary
 tools/termux/eoic100
+tools/caps/caps_readonly
+tools/caps/caps_native
+tools/caps/eq_native
+*.o
+*.a
+*.dylib
+*.so
+*.dSYM/
+*.app/
 
 # Python
 __pycache__/
 *.pyc
-# Local private firmware and device-specific binaries
-/firmware/private/
-*.bin
-
 # Large generated research output and binary-derived caches
 /research/cache/
+/macos-tuner/.build/
+/macos-tuner/.swiftpm/
+/macos-tuner/*.xcuserstate
+/build/
+/dist/
+.DS_Store
 
 # Local raw device captures
 /research/readonly-device-check-*.json

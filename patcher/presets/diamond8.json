@@ -3,13 +3,13 @@
   "description": "Eight-band internal EO-IC100 firmware EQ used in the successful test build.",
   "global_gain_db": -5.7,
   "filters": [
-    {"type": 1, "name": "Peak", "frequency_hz": 199.96, "gain_db": -6.1, "q": 0.3},
-    {"type": 1, "name": "Peak", "frequency_hz": 660.10, "gain_db": 5.015, "q": 0.6405},
-    {"type": 2, "name": "High shelf", "frequency_hz": 1200.0, "gain_db": 1.558, "q": 0.6051},
-    {"type": 1, "name": "Peak", "frequency_hz": 3456.45, "gain_db": -1.437, "q": 2.6809},
-    {"type": 1, "name": "Peak", "frequency_hz": 4909.04, "gain_db": 2.161, "q": 2.9878},
-    {"type": 1, "name": "Peak", "frequency_hz": 8423.48, "gain_db": 3.869, "q": 1.4768},
-    {"type": 1, "name": "Peak", "frequency_hz": 9002.75, "gain_db": -1.982, "q": 8.0607},
-    {"type": 1, "name": "Peak", "frequency_hz": 14655.20, "gain_db": -1.563, "q": 1.9270}
+    {"type": 1, "name": "Peak", "frequency_hz": 199.9619903564453, "gain_db": -6.099795818328857, "q": 0.30000001192092896},
+    {"type": 1, "name": "Peak", "frequency_hz": 660.1016845703125, "gain_db": 5.015218257904053, "q": 0.6404694318771362},
+    {"type": 2, "name": "High shelf", "frequency_hz": 1200.0, "gain_db": 1.5575666427612305, "q": 0.6051259636878967},
+    {"type": 1, "name": "Peak", "frequency_hz": 3456.447509765625, "gain_db": -1.4372888803482056, "q": 2.6809444427490234},
+    {"type": 1, "name": "Peak", "frequency_hz": 4909.03564453125, "gain_db": 2.161358118057251, "q": 2.987760543823242},
+    {"type": 1, "name": "Peak", "frequency_hz": 8423.484375, "gain_db": 3.8687260150909424, "q": 1.4768214225769043},
+    {"type": 1, "name": "Peak", "frequency_hz": 9002.74609375, "gain_db": -1.9818049669265747, "q": 8.060710906982422},
+    {"type": 1, "name": "Peak", "frequency_hz": 14655.1962890625, "gain_db": -1.5634068250656128, "q": 1.927000641822815}
   ]
 }

@@ -12,7 +12,7 @@ The last authorized live capture reported `0.04_051101_aa`, `CHECK=1.1`, and nor
 
 | Input | SHA-256 | Scope |
 | --- | --- | --- |
-| `firmware/private/flash-backup.bin` | `6ee1089955817ac0deda01aab8eb7531f3bdd11dd1604fd8c143d6d1538eb0cd` | Preserved original flash; original 0.04 A region and startup initialization. |
+| `firmware/private/flash-backup.bin` | digest retained locally and omitted from the public release | Preserved original flash; original 0.04 A region and startup initialization. |
 | `firmware/private/stock_a.bin` | `9ebc51140b17884a9b3fe97edc58f8b3861ec10dbc0a33499ea31200bdedba87` | Official Samsung 0.23 A image. |
 | `research/readonly-device-check-20261007.json` | Existing capture, not repeated | Current normal device/configuration/HID descriptors and known queries. |
 
