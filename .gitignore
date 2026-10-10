@@ -48,5 +48,21 @@ __pycache__/
 /dist/
 .DS_Store
 
+# Local reverse-engineering projects, generated firmware and crash output
+*.gpr
+*.rep/
+*.lock
+*.core
+*.crash
+/ghidra-projects/
+/GhidraProjects/
+
+# Local credentials and signing material
+.env
+.env.*
+*.pem
+*.p12
+*.mobileprovision
+
 # Local raw device captures
 /research/readonly-device-check-*.json

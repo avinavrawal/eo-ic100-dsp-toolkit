@@ -117,6 +117,17 @@ Evidence and reproducible commands: `RUNTIME_EQ_CONTROL.md`; `tools/research/run
 | INFERRED | Strong technical evidence supports no safe exposed normal-mode runtime EQ mechanism in the examined original 0.04 and official 0.23 firmware. Ordinary volume changes are distinct from editing the EQ configuration. | Combined registered vendor dispatch, fixed-preset EQ call graph, audio-class path, and HID surface. Scope/limits in `RUNTIME_EQ_CONTROL.md`; not an exhaustive proof about inaccessible ROM or other revisions. |
 | UNVERIFIED | Runtime alteration of one EQ parameter reaching the DSP without reflashing; other firmware revisions or independent factory/debug interfaces. | No supported request path found; no new device experiment performed. |
 
+## Final runtime EQ feasibility review (2026-10-08)
+
+| Status | Finding | Evidence / limits |
+|---|---|---|
+| CONFIRMED | 0.23 config object is initialized at `0x20015bec` (file `0x1e4c4`), pointer table at `0x20015c78`; format supports 140 bytes/eight filters, with 44 meaningful bytes in the stock two-filter config. Setter materializes coefficients in `0x20015fa4` and stores a retained pointer at `0x200162c0`. | Hash-keyed maps, parser and setter disassembly; `research/RUNTIME_EQ_FEASIBILITY_FINAL.md`. |
+| UNVERIFIED | Complete RAM ownership: BSS clear, stack/heap limits, allocator, MPU permissions, and exhaustive direct/indirect readers/writers of config/pointer. | Existing maps cover initialized segments only. No safe relocation/allocation or in-place mutation contract established. |
+| CONFIRMED | Stock path `usb_audio_open_eq(0,2)` reaches codec lifecycle setup, fixed config selector, coefficient generation and ACK-controlled bank setter; successful path clears busy after ACK; error exits can leave it set. | `CODEC_RECONFIGURATION.md`, focused cached disassembly. |
+| CONFIRMED | USB-audio consumer serializes reviewed stock command-path EQ calls; this is not proof that it is the sole codec owner or that its task can tolerate a bounded wait. | Queue/call graph; task registration/priority and complete cross-context ownership unresolved. |
+| CONFIRMED | Saved E3/E4/E5 evidence shows busy becomes stuck after playback-associated transaction entry; no instrumented request, ACK, bank toggle, or clear was observed. E5 reaches changed-config edge but not late staging hook. | Timestamped E3 lifecycle capture, E4/E5 decoded snapshots. E5 coverage leaves earlier branches and runtime pointers unresolved. |
+| DISPROVEN | A safe one-gain prototype is justified by present evidence. | Memory ownership, worker scheduling, pre-request path, completion and rollback are not proven; stock waits are unbounded and status propagation is incomplete. This is a safety/readiness conclusion, not proof that all runtime EQ architecture is impossible. |
+
 ## Physical buttons and HID remapping
 
 | Status | Finding | Evidence |
@@ -278,6 +289,18 @@ Evidence: `CUSTOM_VENDOR_EQ.md`, authored `tools/research/custom_vendor_*` tools
 | CONFIRMED | In official 0.23, `hw_codec_iir_set_cfg` sets `0x200162b4=1` at `0x20a478`, normally clears it after ACK at `0x20a774`, and codec re-enable path clears it at `0x20a884`. Two post-set error exits (`0x20a5ea`, `0x20a78c`) return status 3 without cleanup; stock ACK waits are unbounded. | Targeted radare2 disassembly and pointer-literal scan documented in `research/EQ_BUSY_FLAG_LIFECYCLE.md`; offline, hash-locked inputs. |
 | CONFIRMED | Modified diagnostic firmware adds two timeout-only clears at `0x0c04d1be` and `0x0c04d1fe`. They were not reached by the physical test because the busy guard rejected before setter entry. | Cached generated Thumb disassembly and saved E2 events. |
 | CONFIRMED | `0x200162b4` is the correct busy byte for 0.23 modified B. Original 0.04 uses `0x200177cc` for its corresponding EQ update state. | Version-specific setter/lifecycle disassembly; 0.23 physical guard trace. |
+
+## Codec reconfiguration and EQ RAM source — offline follow-up, 2026-10-08
+
+| Status | Finding | Evidence / limits |
+|---|---|---|
+| CONFIRMED | 0.23 has seven `usb_audio_open_eq` callsites under the USB-audio command consumer or its helpers. On the `(0,2)` route, `0x20c840` calls `0x20a994(config,0x18,2)`, which invokes `0x20a868(config,1)`, followed by `usb_audio_set_eq(2,0)` at `0x20c8ec`. | `eq-call-graph.json` and selected disassembly; callsite presence does not establish execution count or active-playback timing. |
+| CONFIRMED | If `codec_initialized` is already nonzero and enable argument is 1, `0x20a868` clears `0x200162b4` at `0x20a884` while updating lifecycle state. The subsequent stock open-EQ path invokes the EQ setter. The separate disable path `0x20a9b0 -> 0x20a900(1)` does not clear the busy byte. | Cached helper disassembly. This is lifecycle-coupled behavior, not a standalone transaction reset. |
+| CONFIRMED | 0.23 selector table `0x20015c78` points to config `0x20015bec` (official image offset `0x1e4c4`); conversion scratch is at `0x20015fa4`. Original 0.04 uses config `0x20017100`, list `0x2001718c`, and busy byte `0x200177cc`. | Existing image mapping and EQ call graph. |
+| CONFIRMED | The traced 0.23 EQ setter reads a RAM config pointer, generates coefficients and stages them to codec coefficient-bank registers when the hardware path succeeds; no runtime flash read appears in the traced setter chain. | Static disassembly. Exact startup copy instruction and exhaustive runtime writers to the config object were not audited here. |
+| INFERRED | A validated RAM shadow could be applied through the existing configuration/setter chain without reflashing, if it is published and consumed in a serialized command context. | Requires atomic config publication, proven stream quiescence and rollback; none are yet established. |
+| UNVERIFIED | Later `0x20b184(0)` and `0x211db8(0,0)` calls in `usb_audio_open_eq(0,2)` stop/resume audio; ordinary host format changes exercise the EQ path while streaming; old 0.04 has identical command branch conditions. | Call order is known, but semantic effects and old dispatcher parity were not fully reconstructed. |
+| UNVERIFIED | A disable/re-enable without the full `usb_audio_open_eq(0,2)` path reloads or reapplies EQ. | Disable clears codec/peripheral state but not busy; no EQ setter call was established in that helper alone. |
 | INFERRED | A stock error exit that failed to clear the flag, or an ACK wait that never completed, can strand the byte nonzero indefinitely. A transient overlap with a normal update remains possible. The physical trace identifies the nonzero value but not which writer produced it. | Control flow has unpaired post-set exits and unbounded waits; no writer-attribution telemetry was captured. |
 | INFERRED | The safest design is to validate in the USB callback and queue the requested update to a codec/audio worker that serializes with existing updates. The static call graph does not establish that an existing queue is strictly required. | Setter is synchronous, shares transaction state, and polls hardware; callback scheduling/queue ABI is not fully established. |
 | UNVERIFIED | Whether the physical busy byte later cleared, which stock setter branch last wrote it, whether the normal stream path can leave it stuck in the observed state, and the exact generic startup BSS-clear instruction affecting it. | No additional device reads were performed; reconstructed RAM excludes BSS. |
@@ -287,9 +310,36 @@ Evidence: `CUSTOM_VENDOR_EQ.md`, authored `tools/research/custom_vendor_*` tools
 | Status | Finding | Evidence |
 | --- | --- | --- |
 | CONFIRMED | `af_thread` is a stream-handler loop with lost-signal and handler-overrun reporting; it is frame-critical. Calling the synchronous EQ setter there risks delaying audio work. | Cached focused radare2 windows `eq-audio-worker-loop.txt` / `eq-audio-worker-window.txt` and `af_thread` strings. |
-| CONFIRMED | `usb_audio_enqueue_cmd` has a local queue/overflow path, but cached indexes do not identify a consumer task, command ABI, or codec serialization primitive. | `function-index.json`, `thumb-xrefs.json`, and focused string xrefs. |
-| UNVERIFIED | A safe non-frame-critical codec/audio-control worker and its enqueue/dequeue contract. | Not present in the reviewed cached function index/call graph. |
-| BLOCKED | No safe deferred-EQ firmware hook can be implemented without guessing the worker/queue ABI. Existing firmware and protocol remain unchanged. | `research/EQ_DEFERRED_READINESS.md`. |
+| SUPERSEDED | Earlier indexes identified only the queue overflow diagnostic and did not resolve a consumer. | Updated by the targeted scheduler trace below. |
+| CONFIRMED | A 32-bit USB-audio command ring at `0x200196ac` (`0x20019634` item storage) is initialized at `0x20d53c`, pushed at `0x20d54c`, popped at `0x20d5b4`, and consumed by `usb_audio_cmd_handler` at `0x20d1c8`. The application loop at `0x20aa20` calls that handler at `0x20aa82`. | Cached focused disassembly and `research/cache/custom-vendor/codec-scheduler-analysis.json`. |
+| CONFIRMED | The consumer's stream/configuration routes call `usb_audio_open_eq`, so stock reviewed EQ reconfiguration passes through this command-dispatch context. | `eq-call-graph.json`; direct callsites resolve to the handler or helpers called from it. |
+| UNVERIFIED | Exact RTOS task registration/priority, complete global codec serialization, and end-to-end EP0 caller/mailbox contract. The raw push itself is bounded and nonblocking. | Existing initialized-RAM call graph does not resolve task setup or every runtime path. |
+| SUPERSEDED | The initial queue trace left raw insertion and queue-full behavior unresolved. | Updated by the focused queue-semantics trace below. |
+
+## USB-audio command queue semantics — 2026-10-08
+
+| Status | Finding | Evidence |
+| --- | --- | --- |
+| CONFIRMED | Ring capacity is 30 four-byte entries (120-byte backing store). Layout: read/head +0, write/tail +1, count +2, capacity +3, high-water +4, data pointer +8. Command ID is bits 0–7; observed arguments are bits 8–23; the reviewed dispatcher ignores bits 24–31. | `research/cache/custom-vendor/codec-queue-semantics.txt`, `codec-app-init.txt`; `0x20cf68` loads capacity `0x1e`. |
+| CONFIRMED | Raw push `0x20d54c` performs one bounded PRIMASK-preserving try and returns full without waiting. The wrapper `0x20ab28` calls raw push once, then on full loops through queue dump/status diagnostics. | `research/cache/custom-vendor/codec-queue-semantics.txt`. |
+| CONFIRMED | App loop `0x20aa20` invokes the queue consumer at `0x20aa82`, calls `0x209a8c`, then loops. It is distinct from frame-critical `af_thread`; task registration, RTOS priority, and preemption relation remain unknown. | Focused scheduler cache and `research/CODEC_SCHEDULER.md`. |
+| CONFIRMED | Successful stock enqueue calls `0x204758(3)` after raw push; that helper sets bit 3 in event word `0x20019a0c` with a short PRIMASK-preserving update. | Enqueue wrapper and helper disassembly in `codec-queue-semantics.txt` and `codec-queue-scheduler-helpers.txt`. |
+| INFERRED | EP0 can use the same nonblocking sequence (atomic mailbox publish, one raw push, then `0x204758(3)` on success) without calling an RTOS wait. Actual callback constraints, SVC/event wake semantics, and firmware mailbox contract still need validation. | Static push/wrapper/helper control flow; no runtime patch/test. |
+| UNVERIFIED | Whether every codec update is serialized by the command consumer, and whether bounded ACK polling in the app task can affect audio at its actual priority. | Stock EQ call graph covers reviewed USB-audio reconfiguration paths only. |
+| CONFIRMED | Busy may remain set indefinitely after stock missing-ACK/error paths; a queued request must defer only for a finite policy window and then fail without clearing/bypassing the flag. | `research/BUSY_FLAG_STATE_MACHINE.md`. |
+| CONFIRMED | Offline queue/dispatcher model passes 14 tests for FIFO, capacity/full, EP0 queue-full handling, concurrent producer/consumer, immediate EP0 rejection on lock contention, busy/ready, busy timeout, ACK timeout rollback model, existing-command ordering, malformed gains, and no setter work on `af_thread`. | `tools/research/codec_queue_model.py`, `tools/research/test_codec_queue_model.py`. |
+| UNVERIFIED | The Python model does not prove firmware scheduler timing, EP0 integration, mailbox ABI, hardware ACK behavior, or transactional EQ rollback in the stock setter. | Model scope. |
+| UNVERIFIED | Task registration/priority for `0x20aa20` remains unresolved: no direct call, literal pointer, or raw 32-bit app-entry pointer was found in the hash-keyed initialized-RAM/flash indexes. Runtime-built or indirect registration remains possible. | `research/cache/custom-vendor/codec-queue-runtime-audit.json`. |
+| CONFIRMED | E5 playback trace reached the changed-configuration edge and passed the busy check, but did not increment its late `0x20a6d4` copy checkpoint. This does not prove coefficient staging was bypassed: the setter has earlier coefficient-write blocks at `0x20a4d8` and `0x20a520`, outside E5 coverage. No specific Track A correction is supported by this trace. | `research/cache/caps-macos/codec-ack-progress-deploy-20261008/postboot/e5-decoded.json`; cached official 0.23 disassembly `focused-disassembly-d09806e4c6e6b599.txt`. |
+| CONFIRMED | From changed edge `0x20a462`, the static path copies a fixed config header, tests count at `0x20a4c2` (`bls 0x20a5a8`), selector at `0x20a4d6` (`bne 0x20a5b6`), another count at `0x20a506` (`bls 0x20a5ee`), selector at `0x20a518` (`bne 0x20a600`), then consistency checks can retry `0x20a462`; a later state check at `0x20a6b4` can branch to `0x20a790` before the `0x20a6c0` loop containing `0x20a6d4`. E5 records none of those branch outcomes. The pointer-comparison copy loops are finite for valid source/end pointers, but their runtime pointer values are not captured. | Cached disassembly and `codec-ack-progress-report.json`; physical E5 response `e5-decoded.json`. |
+| CONFIRMED | In the codec-ACK progress firmware, E5 live busy remained 1 with register snapshot `0x1f`, selector/request/ACK zero before playback, during controlled playback, immediately after the player was terminated/reaped, and 2 seconds after release. E4 retained one transaction entry and zero request/ACK/busy-clear/error events; its `0x88` register field is the last event-time snapshot, not the E5 live register. | `research/cache/caps-macos/pause-apply-20261008/pause-apply.log`. |
+| UNVERIFIED | `codec_initialized` cannot be determined from the installed progress image's E4/E5; its E2 response is fixed empty diagnostic data. No pause-and-apply ready window was observed because busy remained set. | Probe ABI in `custom_vendor_codec_ack.c`; pause-and-apply capture, 2026-10-08. |
+| UNVERIFIED | No cached finding establishes a USB PCM processing callback's sample format, channel/buffer layout, ownership, deadline budget, or atomic coefficient-update contract. The known `af_thread` is frame-critical; the app/command loop's task priority is unresolved. | Existing scheduler/lifecycle reports and targeted search of cached research, 2026-10-08. |
+| CONFIRMED | Stock enqueue sets event bit 3 via `0x204758(3)` after a successful push. It ORs `1<<3` into `0x20019a0c`; `0x20d1d0` clears bit 3 at command-handler entry. Both set/clear helpers use short PRIMASK-preserving critical sections. | `codec-queue-semantics.txt`, `codec-event-bit-ops.txt`, `codec-command-dispatch-expanded.txt`. |
+| INFERRED | Event bit 3 is a shared pending flag consumed by the software event service reached after the app loop drains the queue; no direct RTOS wake/scheduler call is present in the producer helper. Whether a task is blocked or promptly rescheduled is unverified. | `codec-event-service-expanded.txt`; caller flow at `0x20aa82`–`0x20aa8a`. |
+| CONFIRMED | Command IDs `0x00`–`0x14` index the table at `0x20d20a`. ID `0x13` currently routes to generic unknown-command logging at `0x20d418`; it is the least disruptive candidate extension ID if special-cased there, preserving the `>0x14` fallback. | `codec-command-dispatch-expanded.txt`; generated ID map `codec-queue-runtime-audit.json`. |
+| INFERRED | EP0 can perform one raw queue push and event-bit set without waiting: both primitives have fixed bounded work, no loop or scheduler call, and restore/preserve PRIMASK. This avoids the full-queue diagnostic wrapper. Actual callback integration and mailbox publication remain untested. | `codec-queue-semantics.txt`, `codec-event-bit-ops.txt`; no firmware patch. |
+| CONFIRMED | If the busy byte never clears, a queued EQ command cannot safely reach the setter. The safe outcome is a finite pre-setter busy timeout/status, dropping the request and leaving the byte untouched; recovery requires natural codec lifecycle recovery. | Existing `BUSY_FLAG_STATE_MACHINE.md` plus deferred queue policy. |
 
 ## Recovery selection restored — 2026-10-08
 
@@ -299,3 +349,85 @@ Evidence: `CUSTOM_VENDOR_EQ.md`, authored `tools/research/custom_vendor_*` tools
 | CONFIRMED | Before changing the boot flag, full A (163840 bytes) matched the preserved recovery image byte-for-byte, with valid header. | `recover/a-before.bin`; SHA-256 digest retained locally and omitted from the public release. |
 | CONFIRMED | Only active boot selection changed B-to-A. Full readback verifies active `AAAAAAAA`; backup remains `AAAAAAAA` and its full sector is unchanged. No A/B firmware write, guard-image Stage, or software reboot occurred. | `recover/flags-before.bin`, `recover/flags-after.bin`, `recover/offline-verification.json`; reviewed native recovery log. |
 | UNVERIFIED | Recovery A normal boot after the flag change. | User must physically unplug for 15 seconds and reconnect; no software reboot was sent. |
+
+## Scheduler telemetry prototype — offline only, 2026-10-08
+
+| Status | Finding | Evidence |
+| --- | --- | --- |
+| CONFIRMED | Deterministic experimental telemetry image derives from official Samsung 0.23 B hash `2f418d3a324ec4217c32c4bf98d43c3cd07d59d81f82974f29320d399fa769f3`; output is cached at `research/cache/custom-vendor/scheduler-telemetry.bin`, SHA-256 `9e626fe28abbff2905d618c626d78d6c3f1dc79157da39f22eb0de45bc1bdade`. | `custom_vendor_telemetry_patch.py`, deterministic report, seven focused tests. |
+| CONFIRMED | The image uses E0 CAPS flags `04` and read-only E3 (`c0/e3/454f/4943`, 52 bytes). Counters cover app-loop calls, consumer calls, event-bit-3 set/clear, busy-zero/nonzero samples, queue-full, current/high-water depth, and raw timer totals/max. | `custom_vendor_telemetry.c`, `eoic_scheduler_telemetry_probe.py`, `SCHEDULER_TELEMETRY.md`. |
+| CONFIRMED | E1 is rejected; the telemetry source has no EQ setter, busy-byte write, codec MMIO write, or `af_thread` hook. The stock boot EQ bytes and known descriptor bytes are preserved. | Hash-locked patch report and offline source/image invariants. |
+| INFERRED | `consumer_calls` deltas taken during separately verified audio playback can establish that the software consumer is running during the playback interval; firmware telemetry does not itself prove stream-active state. | Existing candidate `0x20aa20` loop invokes `0x20d1c8`; no confirmed active-stream flag was identified. |
+| UNVERIFIED | Live timing cost, timer frequency, task priority/stack alignment, actual USB callback behavior, and busy transitions across playback phases. The CPU emulator could not execute `MRS PRIMASK` in this environment (SIGILL), so wrapper equivalence is static/model-tested only. | Offline-only build and test scope; no device request was sent. |
+| UNVERIFIED | RX capacity is lowered from 240 to 176 bytes to reserve a volatile state tail. Known stock command strings fit; compatibility with undocumented larger OUT payloads is not established. | Telemetry setup guard and existing stock RX buffer map. |
+
+## Scheduler telemetry lifecycle capture — physical read-only, 2026-10-08
+
+| Status | Finding | Evidence |
+| --- | --- | --- |
+| CONFIRMED | Device booted telemetry B as `04e8:a05e`, `0.23_051101_ab`, CHECK `1.1`; audio and HID interfaces were present. All E0 responses returned flags `04`. | `research/cache/caps-macos/scheduler-telemetry-lifecycle-20261008/lifecycle-full.log`. |
+| CONFIRMED | Idle busy samples were 1,028 zero / 0 nonzero. In the first interval ending 2 seconds after playback began, 2,810 nonzero / 11 zero samples accrued (99.61%). Every later playback interval and all samples through 30 seconds after playback stopped were 100% nonzero; busy remained set at every snapshot. | `lifecycle-decoded.json`; raw timestamped E3 responses in `lifecycle-full.log`. |
+| CONFIRMED | `consumer_calls` delta equaled app-loop delta in every interval. Calls ran at about 1,500/s during playback, then about 7–8/s after stop. Queue depth/full stayed 0; event bit-3 signals and clears remained paired, with no pending bit. | Interval counter deltas in `lifecycle-decoded.json`. |
+| INFERRED | The busy state becomes set during audio startup/early playback and does not clear through the normal playback-stop path within 30 seconds. This is consistent with a transaction state remaining asserted or an ACK/recovery path that fails to complete; the capture does not identify the exact writer or hardware cause. | First E3 during playback; persistent nonzero samples after stop. Host audio playback alone does not prove codec/DSP activity. |
+
+## Codec pre-request progress capture — physical read-only, 2026-10-08
+
+| Status | Finding | Evidence |
+| --- | --- | --- |
+| CONFIRMED | The progress image booted as normal B: `04e8:a05e`, `0.23_051101_ab`, CHECK `1.1`; audio and HID interfaces enumerate. E0 returned flags `04`, and the read-only E5 response identified `EPRG` version 1, size 28. | `research/cache/caps-macos/codec-ack-progress-deploy-20261008/postboot/`. |
+| CONFIRMED | At idle all six checkpoint counters were zero, software busy was 0, selector/request/ACK were 0, and register snapshot was `0x0000001f`. During the short tone, busy-check count became 1 with its BNE outcome false; changed-configuration count became 1 and equal-configuration count remained 0. | Raw E5 responses and `e5-decoded.json`. |
+| CONFIRMED | No coefficient-copy checkpoint, main request checkpoint, or alternate request-clear checkpoint occurred during the sample. Immediately after playback, busy remained 1, selector/request/ACK remained 0, and register snapshot was `0x0000001f`. The host player was alive at the during-playback E5 sample. | `e5-playback.log`; before/during/after deltas in `e5-decoded.json`. |
+| INFERRED | The observed transaction takes the changed-configuration path but stops before the first instrumented coefficient-copy point. The busy check itself did not take its BNE path in this sample. The diagnostic does not identify which intermediate decision prevented coefficient staging. | Sparse checkpoint deltas; no intermediate branch probes. |
+
+## RAM-shadow runtime EQ prototype — offline model, 2026-10-08
+
+| Status | Finding | Evidence / limits |
+|---|---|---|
+| CONFIRMED | Stock `usb_audio_open_eq(0,2)` order is lifecycle helper (`0x20a994 -> 0x20a868(config,1)`, conditional busy clear at `0x20a884`) followed by selector/setter (`0x20c8ec -> 0x20c800 -> 0x20a938 -> 0x20a424`). | Hash-keyed 0.23 disassembly; this does not prove stream stop/resume semantics. |
+| CONFIRMED | Offline contract model validates E1 gain, stages a separate candidate config, queues command ID `0x13`, signals event bit 3, and only models pointer commit after acknowledged worker success. E6 status is read-only and E2 remains unchanged. | `tools/research/ram_shadow_eq_model.py`, `test_ram_shadow_eq_model.py`; no firmware image integration. |
+| CONFIRMED | Busy deferral is finite in the model; timeout and setter/ACK failure do not clear busy and preserve the prior modeled active config/pointer. | Offline tests only; no proof of physical DSP bank rollback. |
+| UNVERIFIED | Safe RAM reservation, command-dispatch hook safety, task timing, stream quiescence/resume, real setter completion status, and hardware rollback. | `research/RAM_SHADOW_EQ_PROTOTYPE.md`; these block firmware/physical readiness. |
+
+## Runtime EQ RAM-allocation gate — offline, 2026-10-08
+
+| Status | Finding | Evidence / limits |
+|---|---|---|
+| UNVERIFIED | No usable heap allocator ABI, bounds, initialization order, or ownership is established in the cached indexes. | Targeted searches over existing strings/function/call indexes found no allocator; absence of strings alone does not prove the firmware has no allocator. |
+| CONFIRMED | The initialized-RAM reconstruction describes only three startup copy segments and explicitly excludes BSS; no BSS allocation/zeroing contract is recorded for the appended extension. | `runtime_eq_map.py`, `runtime-eq-official023-*/mapping.json`; this is insufficient to add a writable BSS range safely. |
+| CONFIRMED | The deterministic extension linker accepts explicit read-only/executable sections and rejects writable/BSS allocated sections. Appended XIP bytes are not established as writable RAM. | `tools/research/arm_elf.py`, `custom_vendor_patch.py`. |
+| CONFIRMED | The known 240-byte USB RX reservation is shared by EP0 and diagnostic state and is unavailable for EQ buffers. | Existing custom-vendor ABI and RAM-shadow prototype review. |
+| INFERRED | Encoding a gain in the existing queue word could eliminate a separate pending-gain allocation, but applying it in the shared stock config cannot guarantee rollback without reliable setter completion and serialization. | Existing queue ABI and stock config pointer path; no safe fallback established. |
+
+## In-place stock EQ configuration update — offline feasibility, 2026-10-08
+
+| Status | Finding | Evidence / limits |
+|---|---|---|
+| CONFIRMED | 0.23 config at `0x20015bec` has a 12-byte `<ffI>` header plus two populated 16-byte `<Ifff>` filters (44 meaningful bytes; capacity eight bands/140 bytes). Band 0 gain is at `0x20015bfc`. | Hash-locked `audit.json`, binary parser and config layout. |
+| CONFIRMED | The config is part of startup-copied SRAM. Conversion reads config values and writes generated coefficients to `0x20015fa4`; the hardware setter also stores the config pointer at `0x200162c0`. | Cached `0x20a938`, `0x20a178`, `0x20a424` disassembly. |
+| INFERRED | CPU stores to the object are physically possible because its runtime address is SRAM. MPU write permissions and exhaustive runtime writers are not established, so this is not evidence that in-place edits are safe. | Startup mapping and bounded xrefs only. |
+| CONFIRMED | Reviewed stock EQ-open routes serialize through the USB-audio command consumer, but serialization against every codec/config reader is not proven. | `eq-call-graph.json`, scheduler analysis. |
+| CONFIRMED | The traced setter path consumes the existing RAM config and does not reload it from flash. No overwrite of the config by the traced stock reconfiguration path was found. | Selector/config/setter disassembly; not exhaustive whole-image writer proof. |
+| CONFIRMED | Reliable rollback through the stock high-level path is unavailable: ACK waits are unbounded, and `audio_eq_set_cfg` does not propagate the low-level setter result to its caller. | Setter and caller disassembly / `eq-call-graph.json`. |
+| UNVERIFIED | Whether the stored config pointer at `0x200162c0` is dereferenced by other runtime paths and whether the config has readers outside the serialized consumer. | Bounded EQ call graph does not recover every indirect/runtime access. |
+
+## Ghidra headless runtime-EQ audit — 2026-10-08
+
+| Status | Finding | Evidence |
+|---|---|---|
+| CONFIRMED | Official 0.23 reset/copy startup initializes source `[0x8a34,0x11e68)` at `0x20000140..0x20009574`, clears `0x20009574..0x200095d4`, copies `[0x11eb0,0x1e7bc)` to `0x200095d8..0x20015ee4`, clears `0x20015ee4..0x20015ee8`, and copies `[0x1ebec,0x1ec8c)` to `0x20015ee8..0x20015f88`. Initial MSP loaded is `0x20027ff0`. | Ghidra 12.1.4 headless `mapped-targeted-export.txt`, official input hash in export runner. |
+| CONFIRMED | Original 0.04 startup copies `[0xec5c,0x19214)` to `0x20000140..0x2000a6f8`, clears `0x2000a6f8..0x2000a758`, copies `[0x1925c,0x25f04)` to `0x2000a75c..0x20017404`, clears `0x20017404..0x20017408`, and copies `[0x262fc,0x26394)` to `0x20017408..0x200174a0`. Initial MSP loaded is `0x20027ff0`. | Ghidra 12.1.4 headless `original004/mapped-targeted-export.txt`; original input hash in export runner. |
+| CONFIRMED | Only four bytes separate the first 0.23 BSS clear end from the next initialized segment; it is not a usable subsystem allocation. | Startup loop bounds in Ghidra export. |
+| CONFIRMED | Targeted Ghidra exports resolve official EQ config/table/pointer/busy/scratch and `0x403000e0` literal references; original 0.04 selected EQ functions resolve config `0x20017100`, table `0x2001718c`, busy `0x200177cc`, and peripheral references. | `research/cache/ghidra-runtime-eq/{official023,original004}/mapped-targeted-export.txt` (ignored). |
+| UNVERIFIED | Total SRAM boundary, heap ABI/bounds, task stacks, MPU write policy, and exhaustive indirect readers/writers remain unknown. | The mapped startup regions and targeted function set are bounded, not a whole-program ownership proof. |
+
+## Custom runtime-EQ architecture — offline design, 2026-10-09
+
+| Status | Finding | Evidence |
+|---|---|---|
+| CONFIRMED | 0.23 first copy is `[0x8a34,0x11e68)` to `0x20000140..0x20009574`; zero-fill ends at `0x200095d4`; next copied data starts at `0x200095d8`, leaving only four bytes. | Ghidra startup LDR literals and copy/clear loops; corrected hash-locked map. |
+| INFERRED | Reset MSP `0x20027ff0` may be the top of a 0x28000-byte SRAM window from `0x20000000`. | Reset literal only; physical SRAM boundary and task-stack allocation are not proven. |
+| UNVERIFIED | No exact 0x400-byte exclusively owned writable address, heap bounds, task-stack map, or MPU write policy is established. | Startup map and scheduler artifacts do not describe runtime allocations. |
+| CONFIRMED / SCOPED | Existing USB-audio command ring has 30 four-byte items; `0x20aa20`/`0x20d1c8` is distinct from frame-critical `af_thread`; `0x13` is a candidate unused dispatcher ID. | Focused 0.23 queue/dispatcher disassembly; task priority and full codec-owner scope remain unknown. |
+| CONFIRMED / PARTIAL | Stock update uses register `0x403000e0`, request bit 22, ACK bit 24, and coefficient-write region `0x40302000..0x40302340`; stock waits are unbounded. | Ghidra export and prior physical diagnostic traces. Exact custom bank ABI and timeout recovery are unverified. |
+| PROPOSED | E7/E8 custom SET_GAIN/status protocol and 0x400-byte logical pool are documented, with no physical RAM base assigned. | `research/CUSTOM_RUNTIME_EQ_ARCHITECTURE.md`; protocol IDs untested and collision audit incomplete. |
+| UNVERIFIED | Safe coefficient-worker task, complete serialization with all stock codec paths, and a post-codec-init reapply hook. | Existing queue serializes reviewed commands only; task registration/priority and lifecycle completion callback unresolved. |

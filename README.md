@@ -2,6 +2,10 @@
 
 An experimental research and tuning toolkit for Samsung/AKG EO-IC100 USB-C earphones. It includes an eight-band macOS DSP tuner, a hash-locked slot-B EQ patcher, USB transport/recovery tools for macOS and Termux, offline diagnostics, and research notes.
 
+## Project status
+
+The tuner builds EQ firmware images for persistent installation in slot B. Live runtime EQ changes while audio is playing are not supported: the custom command path receives and validates a gain, but the stock codec update path rejects it in the observed runtime state. The diagnostic firmware and device-specific captures are excluded from Git. Rebuilding the application and running its offline tests do not require earphones or firmware assets. Device microphone and audio performance must be verified on the individual device; offline checks cannot establish them.
+
 **Use at your own risk.** Firmware installation can make a device unbootable. Preserve the complete device backup and original slot-A image. Never write the active slot or erase recovery A. Read [the recovery guide](docs/recovery.md) and the in-app phase description before any physical operation. Build and test commands below do not access USB.
 
 ## macOS tuner
